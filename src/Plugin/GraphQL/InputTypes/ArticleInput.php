@@ -15,6 +15,11 @@ use Drupal\graphql\Plugin\GraphQL\InputTypes\InputTypePluginBase;
  *     "body" = {
  *        "type" = "String",
  *        "nullable" = "TRUE"
+ *     },
+ *     "field_media_image" = {
+ *        "type" = "Int",
+ *        "multi" = "TRUE",
+ *        "nullable" = "TRUE"
  *     }
  *   }
  * )

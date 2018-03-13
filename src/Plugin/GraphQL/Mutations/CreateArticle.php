@@ -30,6 +30,7 @@ class CreateArticle extends CreateEntityBase {
     return [
       'title' => $args['input']['title'],
       'body' => $args['input']['body'],
+      'field_media_image' => $args['input']['image_ids'],
     ];
   }
 

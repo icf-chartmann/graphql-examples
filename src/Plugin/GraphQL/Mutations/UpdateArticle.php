@@ -23,7 +23,7 @@ use Drupal\graphql\GraphQL\Execution\ResolveContext;
  * )
  */
 class UpdateArticle extends UpdateEntityBase {
-
+asdfasdfadsfa
   /**
    * {@inheritdoc}
    */
@@ -31,6 +31,7 @@ class UpdateArticle extends UpdateEntityBase {
     return array_filter([
       'title' => $args['input']['title'],
       'body' => key_exists('body', $args['input']) ? $args['input']['body'] : '',
+      'field_media_image' => key_exists('field_media_image', $args['input']) ? $args['input']['field_media_image'] : [],
     ]);
   }
 
