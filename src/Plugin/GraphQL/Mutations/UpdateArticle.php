@@ -23,7 +23,6 @@ use Drupal\graphql\GraphQL\Execution\ResolveContext;
  * )
  */
 class UpdateArticle extends UpdateEntityBase {
-asdfasdfadsfa
   /**
    * {@inheritdoc}
    */
