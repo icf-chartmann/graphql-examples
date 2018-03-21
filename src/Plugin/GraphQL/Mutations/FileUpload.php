@@ -100,7 +100,13 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
    */
   public function resolve($value, array $args, ResolveContext $context, ResolveInfo $info) {
     /** @var \Symfony\Component\HttpFoundation\File\UploadedFile $file */
-    $file = $args['file'];
+    $filename = $args['file']->getClientOriginalName();
+    $file = array_filter(
+      $_FILES,
+      function ($f) use ($filename) {
+        return $f->getClientOriginalName() == $filename;
+      }
+    )[0];
 
     // Check for file upload errors and return FALSE for this file if a lower
     // level system error occurred.
@@ -127,7 +133,7 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
       case UPLOAD_ERR_OK:
         // Final check that this is a valid upload, if it isn't, use the
         // default error handler.
-        if (is_uploaded_file($file->getRealPath())) {
+        if (file_exists($file->getRealPath())) {
           break;
         }
 
