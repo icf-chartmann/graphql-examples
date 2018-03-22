@@ -1,0 +1,4 @@
+services:
+  graphql_examples.upload_save:
+    class: Drupal\graphql_examples\GraphQLUploadSave
+    arguments: ['@entity.manager', '@file.mime_type.guesser', '@file_system', '@logger.factory', '@renderer', '@config.factory', '@token']

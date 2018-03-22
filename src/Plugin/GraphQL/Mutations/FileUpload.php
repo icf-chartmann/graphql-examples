@@ -61,6 +61,14 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
    */
   protected $fileSystem;
 
+
+  /**
+   * The Upload Save.
+   *
+   * @var \Drupal\graphql_examples\GraphQLUploadSaveInterface
+   */
+  protected $uploadSave;
+
   /**
    * {@inheritdoc}
    */
@@ -71,13 +79,15 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
     EntityTypeManagerInterface $entityTypeManager,
     AccountProxyInterface $currentUser,
     MimeTypeGuesserInterface $mimeTypeGuesser,
-    FileSystemInterface $fileSystem
+    FileSystemInterface $fileSystem,
+    $uploadSave
   ) {
     parent::__construct($configuration, $pluginId, $pluginDefinition);
     $this->entityTypeManager = $entityTypeManager;
     $this->currentUser = $currentUser;
     $this->mimeTypeGuesser = $mimeTypeGuesser;
     $this->fileSystem = $fileSystem;
+    $this->uploadSave = $uploadSave;
   }
 
   /**
@@ -91,7 +101,8 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
       $container->get('entity_type.manager'),
       $container->get('current_user'),
       $container->get('file.mime_type.guesser'),
-      $container->get('file_system')
+      $container->get('file_system'),
+      $container->get('graphql_examples.upload_save')
     );
   }
 
@@ -165,7 +176,7 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
     $entity = $storage->create($values);
 
     // Check if the current user is allowed to create file entities.
-    if (!$entity->access('create', $this->currentUser, [], TRUE)) {
+    if (!$entity->access('create', $this->currentUser, TRUE)) {
       return new EntityCrudOutputWrapper(NULL, NULL, [
         $this->t('You do not have the necessary permissions to create entities of this type.'),
       ]);
@@ -185,16 +196,43 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
       ]);
     }
 
+    $additional_validators = ['file_validate_size' => '2M'];
+
+    // Super hacky way of renaming the file back to the original because of
+    // the simple_oauth bug we are dealing with in the GraphQLSimpleOauthAuthenticationProvider override
+    try {
+      if(!$file->move($file->getPath(), $file->getClientOriginalName())){
+        return new EntityCrudOutputWrapper(NULL, NULL, [
+          $this->t('Could not move uploaded file %name.', [
+            '%file' => $file->getFilename(),
+          ]),
+        ]);
+      }
+    }catch(FileException $e){
+      watchdog_exception('GraphQL Upload Exception - Sad Face', $e);
+      return NULL;
+    }
+    $entity = $this->uploadSave->createFile(
+      $file->getPath() . '/' . $file->getClientOriginalName(),
+      'public://',
+      'jpg jpeg gif png',
+      \Drupal::currentUser(),
+      $additional_validators
+    );
+    $entity->setPermanent();
+    // $entity->save();
+
+
     // Move uploaded files from PHP's upload_tmp_dir to Drupal's temporary
     // directory. This overcomes open_basedir restrictions for future file
     // operations.
-    if (!$this->fileSystem->moveUploadedFile($file->getRealPath(), $entity->getFileUri())) {
-      return new EntityCrudOutputWrapper(NULL, NULL, [
-        $this->t('Could not move uploaded file %name.', [
-          '%file' => $file->getFilename(),
-        ]),
-      ]);
-    }
+//    if (!$this->fileSystem->moveUploadedFile($file->getRealPath(), $entity->getFileUri())) {
+//      return new EntityCrudOutputWrapper(NULL, NULL, [
+//        $this->t('Could not move uploaded file %name.', [
+//          '%file' => $file->getFilename(),
+//        ]),
+//      ]);
+//    }
 
     // Set the permissions on the new file.
     $this->fileSystem->chmod($entity->getFileUri());
