@@ -111,13 +111,14 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
    */
   public function resolve($value, array $args, ResolveContext $context, ResolveInfo $info) {
     /** @var \Symfony\Component\HttpFoundation\File\UploadedFile $file */
-    $filename = $args['file']->getClientOriginalName();
-    $file = array_filter(
-      $_FILES,
-      function ($f) use ($filename) {
-        return $f->getClientOriginalName() == $filename;
-      }
-    )[0];
+//    $filename = $args['file']->getClientOriginalName();
+//    $file = array_filter(
+//      $_FILES,
+//      function ($f) use ($filename) {
+//        return $f->getClientOriginalName() == $filename;
+//      }
+//    )[0];
+    $file = $args['file'];
 
     // Check for file upload errors and return FALSE for this file if a lower
     // level system error occurred.
@@ -200,39 +201,39 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
 
     // Super hacky way of renaming the file back to the original because of
     // the simple_oauth bug we are dealing with in the GraphQLSimpleOauthAuthenticationProvider override
-    try {
-      if(!$file->move($file->getPath(), $file->getClientOriginalName())){
-        return new EntityCrudOutputWrapper(NULL, NULL, [
-          $this->t('Could not move uploaded file %name.', [
-            '%file' => $file->getFilename(),
-          ]),
-        ]);
-      }
-    }catch(FileException $e){
-      watchdog_exception('GraphQL Upload Exception - Sad Face', $e);
-      return NULL;
-    }
-    $entity = $this->uploadSave->createFile(
-      $file->getPath() . '/' . $file->getClientOriginalName(),
-      'public://',
-      'jpg jpeg gif png',
-      \Drupal::currentUser(),
-      $additional_validators
-    );
-    $entity->setPermanent();
+//    try {
+//      if(!$file->move($file->getPath(), $file->getClientOriginalName())){
+//        return new EntityCrudOutputWrapper(NULL, NULL, [
+//          $this->t('Could not move uploaded file %name.', [
+//            '%file' => $file->getFilename(),
+//          ]),
+//        ]);
+//      }
+//    }catch(FileException $e){
+//      watchdog_exception('GraphQL Upload Exception - Sad Face', $e);
+//      return NULL;
+//    }
+//    $entity = $this->uploadSave->createFile(
+//      $file->getPath() . '/' . $file->getClientOriginalName(),
+//      'public://',
+//      'jpg jpeg gif png',
+//      \Drupal::currentUser(),
+//      $additional_validators
+//    );
+//    $entity->setPermanent();
     // $entity->save();
 
 
     // Move uploaded files from PHP's upload_tmp_dir to Drupal's temporary
     // directory. This overcomes open_basedir restrictions for future file
     // operations.
-//    if (!$this->fileSystem->moveUploadedFile($file->getRealPath(), $entity->getFileUri())) {
-//      return new EntityCrudOutputWrapper(NULL, NULL, [
-//        $this->t('Could not move uploaded file %name.', [
-//          '%file' => $file->getFilename(),
-//        ]),
-//      ]);
-//    }
+    if (!$this->fileSystem->moveUploadedFile($file->getRealPath(), $entity->getFileUri())) {
+      return new EntityCrudOutputWrapper(NULL, NULL, [
+        $this->t('Could not move uploaded file %name.', [
+          '%file' => $file->getFilename(),
+        ]),
+      ]);
+    }
 
     // Set the permissions on the new file.
     $this->fileSystem->chmod($entity->getFileUri());
