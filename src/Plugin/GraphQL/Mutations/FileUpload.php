@@ -96,6 +96,34 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
   }
 
   /**
+   * Create an Image Media Entity from a file entity.
+   *
+   * @param \Drupal\file\FileInterface $fileEntity
+   *   The File entity to create the media entity from.
+   *
+   * @return \Drupal\Core\Entity\EntityInterface
+   * @throws \Drupal\Core\Entity\EntityStorageException
+   */
+  public function createImageMediaEntity($fileEntity){
+
+    //TODO: at some point the exif data should also be loaded and added.
+    //$exif = exif_read_data($fileEntity->getFileUri());
+
+    // Save media entity
+    $imageMediaEntity = $this->entityTypeManager->getStorage('media')->create([
+      'bundle' => 'image',
+      'uid' => $this->currentUser->id(),
+      'status' => 1,
+      'field_media_image' => [
+        'target_id' => $fileEntity->id()
+      ]
+    ]);
+    $imageMediaEntity->save();
+
+    return $imageMediaEntity;
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function resolve($value, array $args, ResolveContext $context, ResolveInfo $info) {
@@ -195,6 +223,9 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
 
     // If we reached this point, we can save the file.
     if (($status = $entity->save()) && $status === SAVED_NEW) {
+
+      // create the media entity
+      $entity = $this->createImageMediaEntity($entity);
       return new EntityCrudOutputWrapper($entity);
     }
 
