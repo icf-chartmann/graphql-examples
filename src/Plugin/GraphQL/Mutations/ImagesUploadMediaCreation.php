@@ -19,17 +19,18 @@ use Drupal\graphql\GraphQL\Execution\ResolveContext;
  * TODO: Add the whole range of file upload validations from file_save_upload().
  *
  * @GraphQLMutation(
- *   id = "file_upload",
+ *   id = "images_upload_media_creation",
  *   secure = "false",
- *   name = "fileUpload",
+ *   name = "imagesUploadMediaCreation",
  *   type = "EntityCrudOutput!",
+ *   multi = true,
  *   entity_type = "file",
  *   arguments = {
- *     "file" = "Upload!",
+ *     "files" = "Upload!",
  *   }
  * )
  */
-class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInterface {
+class ImagesUploadMediaCreation extends MutationPluginBase implements ContainerFactoryPluginInterface {
   use DependencySerializationTrait;
   use StringTranslationTrait;
 
@@ -128,105 +129,106 @@ class FileUpload extends MutationPluginBase implements ContainerFactoryPluginInt
    */
   public function resolve($value, array $args, ResolveContext $context, ResolveInfo $info) {
     /** @var \Symfony\Component\HttpFoundation\File\UploadedFile $file */
-    $file = $args['file'];
+    $files = $args['files'];
 
-    // Check for file upload errors and return FALSE for this file if a lower
-    // level system error occurred.
-    //
-    // @see http://php.net/manual/features.file-upload.errors.php.
-    switch ($file->getError()) {
-      case UPLOAD_ERR_INI_SIZE:
-      case UPLOAD_ERR_FORM_SIZE:
+
+    $media = [];
+    foreach ($files as $file){
+      // Check for file upload errors and return FALSE for this file if a lower
+      // level system error occurred.
+      //
+      // @see http://php.net/manual/features.file-upload.errors.php.
+      switch ($file->getError()) {
+        case UPLOAD_ERR_INI_SIZE:
+        case UPLOAD_ERR_FORM_SIZE:
+          return new EntityCrudOutputWrapper(NULL, NULL, [
+            $this->t('The file %file could not be saved because it exceeds %maxsize, the maximum allowed size for uploads.', [
+              '%file' => $file->getFilename(),
+              '%maxsize' => format_size(file_upload_max_size())
+            ]),
+          ]);
+
+        case UPLOAD_ERR_PARTIAL:
+        case UPLOAD_ERR_NO_FILE:
+          return new EntityCrudOutputWrapper(NULL, NULL, [
+            $this->t('The file %file could not be saved because the upload did not complete.', [
+              '%file' => $file->getFilename(),
+            ]),
+          ]);
+
+        case UPLOAD_ERR_OK:
+          // Final check that this is a valid upload, if it isn't, use the
+          // default error handler.
+          if (is_uploaded_file($file->getRealPath())) {
+            break;
+          }
+
+        // Unknown error.
+        default:
+          return new EntityCrudOutputWrapper(NULL, NULL, [
+            $this->t('The file %file could not be saved. An unknown error has occurred.', [
+              '%file' => $file->getFilename(),
+            ]),
+          ]);
+      }
+
+      $name = $file->getClientOriginalName();
+      $mime = $this->mimeTypeGuesser->guess($name);
+      $destination = file_destination("public://{$name}", FILE_EXISTS_RENAME);
+
+      // Begin building file entity.
+      $values = [
+        'uid' => $this->currentUser->id(),
+        'status' => 0,
+        'filename' => $name,
+        'uri' => $destination,
+        'filesize' => $file->getSize(),
+        'filemime' => $mime,
+      ];
+
+      $storage = $this->entityTypeManager->getStorage('file');
+      /** @var \Drupal\file\FileInterface $entity */
+      $entity = $storage->create($values);
+
+      // Validate the entity values.
+      if (($violations = $entity->validate()) && $violations->count()) {
+        return new EntityCrudOutputWrapper(NULL, $violations);
+      }
+
+      // Validate the file name length.
+      if ($errors = file_validate($entity, ['file_validate_name_length' => []])) {
         return new EntityCrudOutputWrapper(NULL, NULL, [
-          $this->t('The file %file could not be saved because it exceeds %maxsize, the maximum allowed size for uploads.', [
+          $this->t('The specified file %name could not be uploaded.', [
             '%file' => $file->getFilename(),
-            '%maxsize' => format_size(file_upload_max_size())
           ]),
         ]);
+      }
 
-      case UPLOAD_ERR_PARTIAL:
-      case UPLOAD_ERR_NO_FILE:
+      // Move uploaded files from PHP's upload_tmp_dir to Drupal's temporary
+      // directory. This overcomes open_basedir restrictions for future file
+      // operations.
+      if (!$this->fileSystem->moveUploadedFile($file->getRealPath(), $entity->getFileUri())) {
         return new EntityCrudOutputWrapper(NULL, NULL, [
-          $this->t('The file %file could not be saved because the upload did not complete.', [
+          $this->t('Could not move uploaded file %name.', [
             '%file' => $file->getFilename(),
           ]),
         ]);
+      }
 
-      case UPLOAD_ERR_OK:
-        // Final check that this is a valid upload, if it isn't, use the
-        // default error handler.
-        if (is_uploaded_file($file->getRealPath())) {
-          break;
-        }
+      // Set the permissions on the new file.
+      $this->fileSystem->chmod($entity->getFileUri());
 
-      // Unknown error.
-      default:
-        return new EntityCrudOutputWrapper(NULL, NULL, [
-          $this->t('The file %file could not be saved. An unknown error has occurred.', [
-            '%file' => $file->getFilename(),
-          ]),
-        ]);
+      // If we reached this point, we can save the file.
+      if (($status = $entity->save()) && $status === SAVED_NEW) {
+
+        // create the media entity
+        $entity = $this->createImageMediaEntity($entity);
+        $media[] = new EntityCrudOutputWrapper($entity);
+      }
     }
 
-    $name = $file->getClientOriginalName();
-    $mime = $this->mimeTypeGuesser->guess($name);
-    $destination = file_destination("public://{$file->getFilename()}", FILE_EXISTS_RENAME);
-
-    // Begin building file entity.
-    $values = [
-      'uid' => $this->currentUser->id(),
-      'status' => 0,
-      'filename' => $name,
-      'uri' => $destination,
-      'filesize' => $file->getSize(),
-      'filemime' => $mime,
-    ];
-
-    $storage = $this->entityTypeManager->getStorage('file');
-    /** @var \Drupal\file\FileInterface $entity */
-    $entity = $storage->create($values);
-
-    // Check if the current user is allowed to create file entities.
-//    if (!$entity->access('create')) {
-//      return new EntityCrudOutputWrapper(NULL, NULL, [
-//        $this->t('You do not have the necessary permissions to create entities of this type.'),
-//      ]);
-//    }
-
-    // Validate the entity values.
-    if (($violations = $entity->validate()) && $violations->count()) {
-      return new EntityCrudOutputWrapper(NULL, $violations);
-    }
-
-    // Validate the file name length.
-    if ($errors = file_validate($entity, ['file_validate_name_length' => []])) {
-      return new EntityCrudOutputWrapper(NULL, NULL, [
-        $this->t('The specified file %name could not be uploaded.', [
-          '%file' => $file->getFilename(),
-        ]),
-      ]);
-    }
-
-    // Move uploaded files from PHP's upload_tmp_dir to Drupal's temporary
-    // directory. This overcomes open_basedir restrictions for future file
-    // operations.
-    if (!$this->fileSystem->moveUploadedFile($file->getRealPath(), $entity->getFileUri())) {
-      return new EntityCrudOutputWrapper(NULL, NULL, [
-        $this->t('Could not move uploaded file %name.', [
-          '%file' => $file->getFilename(),
-        ]),
-      ]);
-    }
-
-    // Set the permissions on the new file.
-    $this->fileSystem->chmod($entity->getFileUri());
-
-    // If we reached this point, we can save the file.
-    if (($status = $entity->save()) && $status === SAVED_NEW) {
-
-      // create the media entity
-      $entity = $this->createImageMediaEntity($entity);
-      return new EntityCrudOutputWrapper($entity);
+    if(!empty($media)){
+      return $media;
     }
 
     return NULL;
