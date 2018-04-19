@@ -27,11 +27,14 @@ class UpdateArticle extends UpdateEntityBase {
    * {@inheritdoc}
    */
   protected function extractEntityInput($value, array $args, ResolveContext $context, ResolveInfo $info) {
-    return array_filter([
+    $input = array_filter([
       'title' => $args['input']['title'],
       'body' => key_exists('body', $args['input']) ? $args['input']['body'] : '',
-      'field_media_image' => key_exists('field_media_image', $args['input']) ? $args['input']['field_media_image'] : [],
     ]);
+
+    // Critical to extract this from the above array_filter otherwise empty arrays will not be added.
+    $input['field_media_image'] = key_exists('field_media_image', $args['input']) ? $args['input']['field_media_image'] : [];
+    return $input;
   }
 
 }
