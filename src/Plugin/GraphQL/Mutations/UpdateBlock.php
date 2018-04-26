@@ -11,8 +11,8 @@ use Drupal\graphql\GraphQL\Execution\ResolveContext;
  *
  * @GraphQLMutation(
  *   id = "update_block",
- *   entity_type = "node",
- *   entity_bundle = "block",
+ *   entity_type = "block_content",
+ *   entity_bundle = "banner_block",
  *   secure = true,
  *   name = "updateBlock",
  *   type = "EntityCrudOutput!",
@@ -22,16 +22,22 @@ use Drupal\graphql\GraphQL\Execution\ResolveContext;
  *   }
  * )
  */
+
 class UpdateBlock extends UpdateEntityBase {
 
   /**
    * {@inheritdoc}
    */
   protected function extractEntityInput($value, array $args, ResolveContext $context, ResolveInfo $info) {
-    return array_filter([
-      'title' => $args['input']['title'],
-      'body' => key_exists('body', $args['input']) ? $args['input']['body'] : '',
+
+    $input = array_filter([
+      'field_title' => $args['input']['title'],
+      'field_summary' => key_exists('body', $args['input']) ? $args['input']['body'] : '',
     ]);
+
+    $input['field_content_link'] = $args['input']['contentLink'];
+
+    return $input;
   }
 
 }
