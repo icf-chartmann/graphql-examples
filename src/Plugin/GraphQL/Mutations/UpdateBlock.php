@@ -11,30 +11,32 @@ use Drupal\graphql\GraphQL\Execution\ResolveContext;
  *
  * @GraphQLMutation(
  *   id = "update_block",
- *   entity_type = "node",
- *   entity_bundle = "block",
+ *   entity_type = "block_content",
+ *   entity_bundle = "banner_block",
  *   secure = true,
  *   name = "updateBlock",
- *   type = "EntityCrudInput!",
+ *   type = "EntityCrudOutput!",
  *   arguments = {
  *     "id" = "String",
  *     "input" = "BlockInput"
  *   }
  * )
  */
+
 class UpdateBlock extends UpdateEntityBase {
 
   /**
    * {@inheritdoc}
    */
   protected function extractEntityInput($value, array $args, ResolveContext $context, ResolveInfo $info) {
-    $input =  array_filter([
-      'title' => $args['input']['title'],
-      'body' => key_exists('body', $args['input']) ? $args['input']['body'] : '',
+
+    $input = array_filter([
+      'field_title' => $args['input']['title'],
+      'field_summary' => key_exists('body', $args['input']) ? $args['input']['body'] : '',
     ]);
 
-    // Critical to extract this from the above array_filter otherwise empty arrays will not be added.
-    $input['field_media_image'] = key_exists('field_media_image', $args['input']) ? $args['input']['field_media_image'] : [];
+    $input['field_content_link'] = $args['input']['contentLink'];
+
     return $input;
   }
 
